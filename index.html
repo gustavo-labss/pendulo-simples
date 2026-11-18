@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pêndulo Simples</title>
+<style>
+  /* Cores: tema claro (padrão) e escuro, ambos com alto contraste para projetor. */
+  :root {
+    --bg: #ffffff;
+    --surface: #f1f3f6;
+    --text: #0a0d14;
+    --muted: #353c4a;
+    --border: #8a94a6;
+    --grid: #d3d8e1;
+    --accent: #0b57d0;
+    --line: #c2410c;
+    --bad: #b3261e;
+    --focus: #f59e0b;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0d12;
+    --surface: #171b24;
+    --text: #f5f7fa;
+    --muted: #cbd3de;
+    --border: #5b6578;
+    --grid: #2c3342;
+    --accent: #7cb1ff;
+    --line: #ffa25a;
+    --bad: #ff8a80;
+    --focus: #fbbf24;
+  }
+
+  * { box-sizing: border-box; }
+  /* Fonte grande que acompanha a tela (largura e altura), para caber sem rolar no projetor. */
+  html { font-size: clamp(15px, min(0.9vw + 8px, 2.25vh), 26px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.35;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 4px solid var(--focus); outline-offset: 2px; }
+
+  /* Topo e abas */
+  .topo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .6rem 1.2rem;
+    padding: .6rem 1.2rem;
+    border-bottom: 3px solid var(--text);
+  }
+  h1 { margin: 0; font-size: 1.5rem; line-height: 1.1; }
+  .subtitulo { margin: 0; color: var(--muted); font-size: .85rem; }
+  .abas { display: flex; gap: .5rem; margin-left: auto; }
+  .abas button, .btn {
+    padding: .4rem 1rem;
+    border: 3px solid var(--text);
+    border-radius: .6rem;
+    background: var(--bg);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .abas button { font-size: 1.1rem; }
+  .abas button[aria-selected="true"], .btn-primario { background: var(--text); color: var(--bg); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn-pequeno { padding: .2rem .7rem; font-size: .85rem; border-width: 2px; }
+  .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+  main { padding: .8rem 1.2rem; }
+  .painel { display: grid; gap: 1rem; }
+  .painel[hidden] { display: none; }
+  .painel-calcular { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .painel-simular { grid-template-columns: minmax(0, 1.35fr) minmax(27rem, 1fr); }
+  .coluna { display: grid; gap: .8rem; align-content: start; }
+  @media (max-width: 1000px) {
+    .painel-calcular, .painel-simular { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: .8rem;
+    padding: .7rem 1rem;
+  }
+  h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+
+  /* Fórmulas */
+  .formulas { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .formula { background: var(--bg); border: 2px solid var(--grid); border-radius: .6rem; padding: .4rem .7rem; }
+  .formula .f { display: block; font-size: 1.15rem; font-weight: 700; white-space: nowrap; }
+  .formula small { display: block; color: var(--muted); font-size: .75rem; }
+  .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 .1em; }
+  .frac > span:first-child { border-bottom: .09em solid currentColor; padding: 0 .2em; }
+  .frac > span:last-child { padding: 0 .2em; }
+  .radicando { border-top: .09em solid currentColor; padding: 0 .1em; }
+
+  /* Tabelas */
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: .3rem .5rem; text-align: right; border-bottom: 2px solid var(--grid); }
+  thead th { font-size: .85rem; color: var(--muted); border-bottom: 3px solid var(--text); vertical-align: bottom; }
+  .medidas tbody th { text-align: center; color: var(--muted); }
+  .medidas input {
+    width: 5.2em;
+    padding: .15rem .4rem;
+    border: 2px solid var(--border);
+    border-radius: .4rem;
+    background: var(--bg);
+    font-weight: 700;
+    text-align: right;
+  }
+  .medidas input.invalido { border-color: var(--bad); outline: 3px solid var(--bad); }
+  .acoes { display: flex; gap: .6rem; margin-top: .7rem; }
+  .resultados tbody th { text-align: left; font-weight: 600; }
+  .resultados .g { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+  .reta { margin: .6rem 0 0; font-size: .95rem; }
+
+  /* Gráfico e simulação: o canvas fica absoluto para não influenciar o tamanho do layout. */
+  .tela { position: relative; }
+  .tela canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tela-grafico { aspect-ratio: 2 / 1; max-height: 36vh; }
+  .legenda { display: flex; gap: 1.2rem; margin-top: .4rem; font-size: .85rem; color: var(--muted); }
+  .legenda span::before { content: ""; display: inline-block; margin-right: .4em; vertical-align: middle; }
+  .leg-ponto::before { width: .7em; height: .7em; border-radius: 50%; background: var(--accent); }
+  .leg-reta::before { width: 1.4em; height: .22em; background: var(--line); }
+  .palco { padding: 0; overflow: hidden; min-height: 24rem; }
+
+  /* Controles e leituras da simulação */
+  .lateral { display: grid; gap: .8rem; align-content: start; }
+  .eq-sim { padding-top: .5rem; padding-bottom: .5rem; font-size: 1.25rem; font-weight: 700; }
+  .eq-sim small { display: block; font-size: .8rem; font-weight: 400; color: var(--muted); }
+  .controle { margin-bottom: .5rem; }
+  .controle-topo { display: flex; align-items: center; gap: .5rem; }
+  .controle label { font-weight: 700; white-space: nowrap; }
+  .controle output { margin-left: auto; font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .controle input[type="range"] { width: 100%; height: 1.6rem; margin: .2rem 0 0; accent-color: var(--accent); }
+  .atalhos { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .botoes { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .4rem; }
+  .botoes .btn { flex: 1 1 auto; font-size: 1.05rem; white-space: nowrap; }
+  .leitura { display: flex; justify-content: space-between; align-items: baseline; gap: .8rem; padding: .3rem 0; border-bottom: 2px solid var(--grid); }
+  .leitura:last-of-type { border-bottom: 0; }
+  .leitura .rotulo { font-size: .9rem; }
+  .leitura .valor { font-size: 1.45rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .leitura.destaque .valor { color: var(--line); font-size: 1.7rem; }
+  .dica { margin: .4rem 0 0; font-size: .8rem; color: var(--muted); }
+  kbd { border: 2px solid var(--border); border-radius: .3rem; padding: 0 .3em; font: inherit; font-weight: 700; }
+</style>
+</head>
+<body>
+<header class="topo">
+  <div>
+    <h1>Pêndulo simples</h1>
+    <p class="subtitulo">Medindo a gravidade com um barbante e um celular</p>
+  </div>
+  <nav class="abas" role="tablist" aria-label="Partes do programa">
+    <button type="button" role="tab" id="aba-calcular" data-aba="calcular" aria-controls="painel-calcular" aria-selected="true">1 · Calcular</button>
+    <button type="button" role="tab" id="aba-simular" data-aba="simular" aria-controls="painel-simular" aria-selected="false" tabindex="-1">2 · Simular</button>
+  </nav>
+  <button type="button" class="btn btn-pequeno" id="btn-tema">Tema escuro</button>
+</header>
+
+<main>
+  <!-- ===================== ABA 1: CALCULAR ===================== -->
+  <section class="painel painel-calcular" id="painel-calcular" role="tabpanel" aria-labelledby="aba-calcular">
+    <div class="coluna">
+      <div class="card">
+        <h2>Fórmulas</h2>
+        <div class="formulas">
+          <div class="formula">
+            <span class="f">T = <span class="frac"><span>t<sub>10</sub></span><span>10</span></span></span>
+            <small>período = tempo de 10 oscilações ÷ 10</small>
+          </div>
+          <div class="formula">
+            <span class="f">g = <span class="frac"><span>4π² · L</span><span>T²</span></span></span>
+            <small>vem de T = 2π√(L/g)</small>
+          </div>
+          <div class="formula">
+            <span class="f">T² = <span class="frac"><span>4π²</span><span>g</span></span> · L</span>
+            <small>é uma reta: inclinação = 4π²/g</small>
+          </div>
+          <div class="formula">
+            <span class="f">g = <span class="frac"><span>4π²</span><span>inclinação</span></span></span>
+            <small>g tirado do gráfico</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Medidas</h2>
+        <table class="medidas">
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">L (m)</th>
+              <th scope="col">t de 10 osc. (s)</th>
+              <th scope="col">T (s)</th>
+              <th scope="col">T² (s²)</th>
+              <th scope="col">g (m/s²)</th>
+            </tr>
+          </thead>
+          <tbody id="corpo-medidas"></tbody>
+        </table>
+        <div class="acoes">
+          <button type="button" class="btn btn-pequeno" id="btn-exemplo">Restaurar exemplo</button>
+          <button type="button" class="btn btn-pequeno" id="btn-limpar">Limpar tabela</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="coluna">
+      <div class="card">
+        <h2>Gráfico T² × L</h2>
+        <div class="tela tela-grafico" id="tela-grafico">
+          <canvas id="canvas-grafico" role="img" aria-label="Gráfico de T ao quadrado em função de L, com os pontos medidos e a reta de regressão"></canvas>
+        </div>
+        <div class="legenda"><span class="leg-ponto">medidas</span><span class="leg-reta">reta de regressão</span></div>
+        <p class="reta" id="texto-reta">—</p>
+      </div>
+
+      <div class="card">
+        <h2>Resultado</h2>
+        <table class="resultados">
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col">g (m/s²)</th>
+              <th scope="col">erro × 9,78<br>(Cuiabá)</th>
+              <th scope="col">erro × 9,81<br>(padrão)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Média das medidas</th>
+              <td class="g" id="media-g">—</td>
+              <td id="media-erro-cuiaba">—</td>
+              <td id="media-erro-padrao">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Pela inclinação</th>
+              <td class="g" id="reta-g">—</td>
+              <td id="reta-erro-cuiaba">—</td>
+              <td id="reta-erro-padrao">—</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="dica">erro % = |g − g<sub>ref</sub>| ÷ g<sub>ref</sub> × 100</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA 2: SIMULAR ===================== -->
+  <section class="painel painel-simular" id="painel-simular" role="tabpanel" aria-labelledby="aba-simular" hidden>
+    <div class="card tela palco" id="tela-simulacao">
+      <canvas id="canvas-simulacao" role="img" aria-label="Animação do pêndulo"></canvas>
+    </div>
+
+    <div class="lateral">
+      <div class="card eq-sim">
+        θ″ = −(g / L) · sen θ
+        <small>resolvida com Runge-Kutta 4 (RK4), passo de 1 ms</small>
+      </div>
+
+      <div class="card">
+        <div class="controle">
+          <div class="controle-topo"><label for="ctl-L">Comprimento L</label><output id="val-L" for="ctl-L"></output></div>
+          <input type="range" id="ctl-L" min="0.2" max="2" step="0.01" value="1">
+        </div>
+        <div class="controle">
+          <div class="controle-topo">
+            <label for="ctl-ang">Ângulo inicial θ₀</label>
+            <span class="atalhos">
+              <button type="button" class="btn btn-pequeno" data-ang="10">10°</button>
+              <button type="button" class="btn btn-pequeno" data-ang="30">30°</button>
+              <button type="button" class="btn btn-pequeno" data-ang="60">60°</button>
+            </span>
+            <output id="val-ang" for="ctl-ang"></output>
+          </div>
+          <input type="range" id="ctl-ang" min="5" max="80" step="1" value="10">
+        </div>
+        <div class="controle">
+          <div class="controle-topo">
+            <label for="ctl-g">Gravidade g</label>
+            <span class="atalhos">
+              <button type="button" class="btn btn-pequeno" data-g="9.78" title="Terra (Cuiabá): 9,78 m/s²">Terra</button>
+              <button type="button" class="btn btn-pequeno" data-g="1.62" title="Lua: 1,62 m/s²">Lua</button>
+              <button type="button" class="btn btn-pequeno" data-g="3.71" title="Marte: 3,71 m/s²">Marte</button>
+            </span>
+            <output id="val-g" for="ctl-g"></output>
+          </div>
+          <input type="range" id="ctl-g" min="1" max="25" step="0.01" value="9.78">
+        </div>
+        <div class="botoes">
+          <button type="button" class="btn btn-primario" id="btn-iniciar">▶ Iniciar</button>
+          <button type="button" class="btn" id="btn-pausar">❚❚ Pausar</button>
+          <button type="button" class="btn" id="btn-reiniciar">↺ Reiniciar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="leitura"><span class="rotulo">Período medido na simulação</span><span class="valor" id="leitura-medido">—</span></div>
+        <div class="leitura"><span class="rotulo">Fórmula simples T₀ = 2π√<span class="radicando">L/g</span></span><span class="valor" id="leitura-t0">—</span></div>
+        <div class="leitura destaque"><span class="rotulo">Diferença</span><span class="valor" id="leitura-diferenca">—</span></div>
+        <p class="dica">Ângulo pequeno: quase iguais. Ângulo grande: o período cresce (60° → ≈ +7%).<br>
+          <kbd>espaço</kbd> inicia/pausa · <kbd>R</kbd> reinicia · <kbd>1</kbd> <kbd>2</kbd> trocam de aba</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+const QUATRO_PI2 = 4 * Math.PI * Math.PI;
+const G_CUIABA = 9.78;
+const G_PADRAO = 9.81;
+const FONTE = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+const $ = seletor => document.querySelector(seletor);
+
+/* ---------- Utilidades ---------- */
+
+// Número no formato brasileiro (vírgula decimal).
+function fmt(x, casas) {
+  if (Math.abs(x) < 0.5 * 10 ** -casas) x = 0; // evita "-0,000"
+  return x.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+// Lê "0,30" ou "0.30". Vazio vira null; texto inválido vira NaN.
+function lerNumero(texto) {
+  const limpo = texto.trim().replace(',', '.');
+  if (limpo === '') return null;
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function cor(nome) {
+  return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+}
+
+// Tamanho de fonte para o canvas, proporcional à fonte da página.
+function fonteCanvas(fator) {
+  return parseFloat(getComputedStyle(document.documentElement).fontSize) * fator;
+}
+
+// Ajusta o canvas à tela (nítido em Retina) e devolve o contexto em pixels CSS.
+function prepararCanvas(canvas) {
+  const r = canvas.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return null; // aba escondida
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(r.width * dpr);
+  const h = Math.round(r.height * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  return { ctx, w: r.width, h: r.height };
+}
+
+/* ---------- Abas e tema ---------- */
+
+const abas = document.querySelectorAll('[role="tab"]');
+
+function abrirAba(nome) {
+  abas.forEach(aba => {
+    const ativa = aba.dataset.aba === nome;
+    aba.setAttribute('aria-selected', String(ativa));
+    aba.tabIndex = ativa ? 0 : -1;
+    document.getElementById('painel-' + aba.dataset.aba).hidden = !ativa;
+  });
+  try { history.replaceState(null, '', '#' + nome); } catch (e) { /* file:// em alguns navegadores */ }
+  desenharTudo();
+}
+
+abas.forEach(aba => aba.addEventListener('click', () => abrirAba(aba.dataset.aba)));
+
+function aplicarTema(tema) {
+  document.documentElement.dataset.theme = tema;
+  $('#btn-tema').textContent = tema === 'dark' ? 'Tema claro' : 'Tema escuro';
+  try { localStorage.setItem('pendulo-tema', tema); } catch (e) { /* sem armazenamento */ }
+  desenharTudo();
+}
+
+$('#btn-tema').addEventListener('click', () => {
+  aplicarTema(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+
+/* ---------- Aba 1: Calcular ---------- */
+
+const EXEMPLO = [
+  ['0,30', '10,98'],
+  ['0,60', '15,60'],
+  ['1,00', '20,08'],
+  ['', ''],
+  ['', ''],
+];
+
+const corpoMedidas = $('#corpo-medidas');
+
+function montarTabela() {
+  for (let i = 1; i <= EXEMPLO.length; i++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <th scope="row">${i}</th>
+      <td><input type="text" inputmode="decimal" autocomplete="off" data-campo="L" aria-label="Comprimento L da medida ${i}, em metros"></td>
+      <td><input type="text" inputmode="decimal" autocomplete="off" data-campo="t" aria-label="Tempo de 10 oscilações da medida ${i}, em segundos"></td>
+      <td data-saida="T">—</td>
+      <td data-saida="T2">—</td>
+      <td data-saida="g">—</td>`;
+    corpoMedidas.appendChild(tr);
+  }
+  corpoMedidas.addEventListener('input', calcular);
+}
+
+function preencherTabela(dados) {
+  corpoMedidas.querySelectorAll('tr').forEach((tr, i) => {
+    tr.querySelector('[data-campo="L"]').value = dados[i][0];
+    tr.querySelector('[data-campo="t"]').value = dados[i][1];
+  });
+  calcular();
+}
+
+// Mínimos quadrados: T² = a·L + b. Devolve null se não der para traçar a reta.
+function regressao(pontos) {
+  const n = pontos.length;
+  if (n < 2) return null;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+  for (const p of pontos) {
+    sx += p.L; sy += p.T2;
+    sxx += p.L * p.L; sxy += p.L * p.T2; syy += p.T2 * p.T2;
+  }
+  const den = n * sxx - sx * sx;
+  if (Math.abs(den) < 1e-12) return null; // todos com o mesmo L
+  const a = (n * sxy - sx * sy) / den;
+  const b = (sy - a * sx) / n;
+  const denR2 = den * (n * syy - sy * sy);
+  const r2 = denR2 > 0 ? (n * sxy - sx * sy) ** 2 / denR2 : 1;
+  return { a, b, r2 };
+}
+
+const erroPercentual = (g, ref) => Math.abs(g - ref) / ref * 100;
+
+function mostrarResultado(prefixo, g) {
+  $(`#${prefixo}-g`).textContent = g === null ? '—' : fmt(g, 3);
+  $(`#${prefixo}-erro-cuiaba`).textContent = g === null ? '—' : fmt(erroPercentual(g, G_CUIABA), 2) + ' %';
+  $(`#${prefixo}-erro-padrao`).textContent = g === null ? '—' : fmt(erroPercentual(g, G_PADRAO), 2) + ' %';
+}
+
+let ultimoCalculo = { pontos: [], reta: null };
+
+function calcular() {
+  const pontos = [];
+  corpoMedidas.querySelectorAll('tr').forEach(tr => {
+    const campoL = tr.querySelector('[data-campo="L"]');
+    const campoT = tr.querySelector('[data-campo="t"]');
+    const L = lerNumero(campoL.value);
+    const t = lerNumero(campoT.value);
+    // Marca em vermelho só o que foi digitado errado; campo vazio só ignora a linha.
+    campoL.classList.toggle('invalido', L !== null && !(L > 0));
+    campoT.classList.toggle('invalido', t !== null && !(t > 0));
+
+    const saida = nome => tr.querySelector(`[data-saida="${nome}"]`);
+    if (L > 0 && t > 0) {
+      const T = t / 10;
+      const T2 = T * T;
+      const g = QUATRO_PI2 * L / T2;
+      pontos.push({ L, T2, g });
+      saida('T').textContent = fmt(T, 3);
+      saida('T2').textContent = fmt(T2, 3);
+      saida('g').textContent = fmt(g, 2);
+    } else {
+      saida('T').textContent = saida('T2').textContent = saida('g').textContent = '—';
+    }
+  });
+
+  const media = pontos.length ? pontos.reduce((s, p) => s + p.g, 0) / pontos.length : null;
+  const reta = regressao(pontos);
+  const gReta = reta && reta.a > 0 ? QUATRO_PI2 / reta.a : null;
+
+  mostrarResultado('media', media);
+  mostrarResultado('reta', gReta);
+
+  const textoReta = $('#texto-reta');
+  if (gReta !== null) {
+    const sinal = Number(reta.b.toFixed(3)) < 0 ? '−' : '+'; // evita "− 0,000"
+    textoReta.innerHTML =
+      `Reta: <strong>T² = ${fmt(reta.a, 3)} · L ${sinal} ${fmt(Math.abs(reta.b), 3)}</strong> (R² = ${fmt(reta.r2, 4)})<br>` +
+      `g = 4π² ÷ ${fmt(reta.a, 3)} = <strong>${fmt(gReta, 3)} m/s²</strong>`;
+  } else {
+    textoReta.textContent = 'Preencha pelo menos 2 medidas com comprimentos diferentes para traçar a reta.';
+  }
+
+  ultimoCalculo = { pontos, reta };
+  desenharGrafico();
+}
+
+// Passo "bonito" para as marcas do eixo (1, 2, 2,5 ou 5 × potência de 10).
+function passoEixo(maximo, marcasDesejadas) {
+  const bruto = maximo / marcasDesejadas;
+  const potencia = 10 ** Math.floor(Math.log10(bruto));
+  const r = bruto / potencia;
+  const m = r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10;
+  return m * potencia;
+}
+
+function casasDecimais(passo) {
+  let c = 0;
+  while (c < 6 && Math.abs(Math.round(passo * 10 ** c) - passo * 10 ** c) > 1e-9) c++;
+  return c;
+}
+
+function desenharGrafico() {
+  const tela = prepararCanvas($('#canvas-grafico'));
+  if (!tela) return;
+  const { ctx, w, h } = tela;
+  const { pontos, reta } = ultimoCalculo;
+  const f = fonteCanvas(0.8);
+  const m = { esq: f * 3.4, dir: f * 1.2, topo: f * 0.9, base: f * 2.8 };
+  const largura = w - m.esq - m.dir;
+  const altura = h - m.topo - m.base;
+
+  // Escalas: começam em zero para mostrar a reta chegando perto da origem.
+  const maxL = pontos.length ? Math.max(...pontos.map(p => p.L)) : 1;
+  const maxT2 = pontos.length ? Math.max(...pontos.map(p => p.T2)) : 4;
+  const passoX = passoEixo(maxL * 1.1, 6);
+  const passoY = passoEixo(maxT2 * 1.1, 5);
+  const xMax = Math.ceil(maxL * 1.1 / passoX) * passoX;
+  const yMax = Math.ceil(maxT2 * 1.1 / passoY) * passoY;
+  const X = v => m.esq + v / xMax * largura;
+  const Y = v => m.topo + altura - v / yMax * altura;
+
+  ctx.font = `${f}px ${FONTE}`;
+  ctx.lineWidth = 1.5;
+
+  // Grade e números dos eixos
+  ctx.strokeStyle = cor('--grid');
+  ctx.fillStyle = cor('--muted');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const casasX = casasDecimais(passoX);
+  for (let k = 0; k * passoX <= xMax + 1e-9; k++) {
+    const x = X(k * passoX);
+    ctx.beginPath(); ctx.moveTo(x, m.topo); ctx.lineTo(x, m.topo + altura); ctx.stroke();
+    ctx.fillText(fmt(k * passoX, casasX), x, m.topo + altura + f * 0.35);
+  }
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const casasY = casasDecimais(passoY);
+  for (let k = 0; k * passoY <= yMax + 1e-9; k++) {
+    const y = Y(k * passoY);
+    ctx.beginPath(); ctx.moveTo(m.esq, y); ctx.lineTo(m.esq + largura, y); ctx.stroke();
+    ctx.fillText(fmt(k * passoY, casasY), m.esq - f * 0.4, y);
+  }
+
+  // Eixos
+  ctx.strokeStyle = cor('--text');
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(m.esq, m.topo);
+  ctx.lineTo(m.esq, m.topo + altura);
+  ctx.lineTo(m.esq + largura, m.topo + altura);
+  ctx.stroke();
+
+  // Nomes dos eixos
+  ctx.fillStyle = cor('--text');
+  ctx.font = `700 ${f}px ${FONTE}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('L (m)', m.esq + largura / 2, h - f * 0.1);
+  ctx.save();
+  ctx.translate(f * 0.2, m.topo + altura / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = 'top';
+  ctx.fillText('T² (s²)', 0, 0);
+  ctx.restore();
+
+  // Reta de regressão (recortada na área do gráfico)
+  if (reta) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(m.esq, m.topo, largura, altura);
+    ctx.clip();
+    ctx.strokeStyle = cor('--line');
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(reta.b));
+    ctx.lineTo(X(xMax), Y(reta.a * xMax + reta.b));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Pontos medidos
+  for (const p of pontos) {
+    ctx.beginPath();
+    ctx.arc(X(p.L), Y(p.T2), f * 0.42, 0, 2 * Math.PI);
+    ctx.fillStyle = cor('--accent');
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = cor('--bg');
+    ctx.stroke();
+  }
+
+  if (!pontos.length) {
+    ctx.fillStyle = cor('--muted');
+    ctx.font = `${f * 1.1}px ${FONTE}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Preencha a tabela de medidas', m.esq + largura / 2, m.topo + altura / 2);
+  }
+}
+
+/* ---------- Aba 2: Simular ---------- */
+
+const PASSO = 0.001;     // passo do RK4, em segundos
+const L_MAXIMO = 2;      // maior comprimento do controle, para a escala do desenho
+
+const sim = {
+  L: 1, g: G_CUIABA, theta0: 0,
+  t: 0, theta: 0, omega: 0,
+  extremos: [0],         // instantes em que o pêndulo parou num extremo (omega = 0)
+  totalExtremos: 0,
+  periodo: null,
+  rodando: false, acumulado: 0, ultimoQuadro: null, idQuadro: 0,
+};
+
+const controles = { L: $('#ctl-L'), ang: $('#ctl-ang'), g: $('#ctl-g') };
+
+// θ'' = −(g/L)·sen θ
+const aceleracao = theta => -(sim.g / sim.L) * Math.sin(theta);
+
+// Um passo de Runge-Kutta 4 para o sistema θ' = ω, ω' = −(g/L)·sen θ.
+function passoRK4(h) {
+  const th = sim.theta;
+  const w = sim.omega;
+  const k1t = w,                k1w = aceleracao(th);
+  const k2t = w + h / 2 * k1w,  k2w = aceleracao(th + h / 2 * k1t);
+  const k3t = w + h / 2 * k2w,  k3w = aceleracao(th + h / 2 * k2t);
+  const k4t = w + h * k3w,      k4w = aceleracao(th + h * k3t);
+  sim.theta = th + h / 6 * (k1t + 2 * k2t + 2 * k3t + k4t);
+  sim.omega = w + h / 6 * (k1w + 2 * k2w + 2 * k3w + k4w);
+
+  // Se ω trocou de sinal, o pêndulo passou por um extremo. Interpola o instante exato.
+  if ((w > 0 && sim.omega <= 0) || (w < 0 && sim.omega >= 0)) {
+    sim.extremos.push(sim.t + h * w / (w - sim.omega));
+    sim.totalExtremos++;
+    if (sim.extremos.length > 3) sim.extremos.shift();
+    // Um período = do extremo atual até o extremo do mesmo lado (dois extremos atrás).
+    if (sim.extremos.length === 3) sim.periodo = sim.extremos[2] - sim.extremos[0];
+  }
+  sim.t += h;
+}
+
+function quadro(agora) {
+  if (!sim.rodando) return;
+  if (sim.ultimoQuadro !== null) {
+    sim.acumulado += Math.min((agora - sim.ultimoQuadro) / 1000, 0.1);
+    while (sim.acumulado >= PASSO) {
+      passoRK4(PASSO);
+      sim.acumulado -= PASSO;
+    }
+  }
+  sim.ultimoQuadro = agora;
+  atualizarSimulacao();
+  sim.idQuadro = requestAnimationFrame(quadro);
+}
+
+function iniciar() {
+  if (sim.rodando) return;
+  sim.rodando = true;
+  sim.ultimoQuadro = null;
+  sim.idQuadro = requestAnimationFrame(quadro);
+  atualizarBotoes();
+}
+
+function pausar() {
+  sim.rodando = false;
+  cancelAnimationFrame(sim.idQuadro);
+  atualizarBotoes();
+  atualizarSimulacao();
+}
+
+// Volta o pêndulo para o ângulo inicial, parado (como segurar antes de soltar).
+function reiniciar() {
+  pausar();
+  sim.t = 0;
+  sim.theta = sim.theta0;
+  sim.omega = 0;
+  sim.extremos = [0];
+  sim.totalExtremos = 0;
+  sim.periodo = null;
+  sim.acumulado = 0;
+  atualizarSimulacao();
+}
+
+function atualizarBotoes() {
+  $('#btn-iniciar').disabled = sim.rodando;
+  $('#btn-pausar').disabled = !sim.rodando;
+}
+
+function lerControles() {
+  sim.L = Number(controles.L.value);
+  sim.g = Number(controles.g.value);
+  const graus = Number(controles.ang.value);
+  sim.theta0 = graus * Math.PI / 180;
+
+  $('#val-L').textContent = fmt(sim.L, 2) + ' m';
+  $('#val-ang').textContent = graus + '°';
+  $('#val-g').textContent = fmt(sim.g, 2) + ' m/s²';
+  document.querySelectorAll('[data-g]').forEach(b =>
+    b.setAttribute('aria-pressed', String(Number(b.dataset.g) === sim.g)));
+  document.querySelectorAll('[data-ang]').forEach(b =>
+    b.setAttribute('aria-pressed', String(Number(b.dataset.ang) === graus)));
+
+  reiniciar(); // mudou o pêndulo: começa de novo
+}
+
+function atualizarSimulacao() {
+  const T0 = 2 * Math.PI * Math.sqrt(sim.L / sim.g);
+  $('#leitura-t0').textContent = fmt(T0, 3) + ' s';
+  if (sim.periodo !== null) {
+    const diferenca = (sim.periodo - T0) / T0 * 100;
+    $('#leitura-medido').textContent = fmt(sim.periodo, 3) + ' s';
+    $('#leitura-diferenca').textContent = (diferenca < 0 ? '−' : '+') + fmt(Math.abs(diferenca), 2) + ' %';
+  } else {
+    $('#leitura-medido').textContent = sim.t > 0 ? 'medindo…' : 'aperte Iniciar';
+    $('#leitura-diferenca').textContent = '—';
+  }
+  desenharPendulo();
+}
+
+function desenharPendulo() {
+  const tela = prepararCanvas($('#canvas-simulacao'));
+  if (!tela) return;
+  const { ctx, w, h } = tela;
+  const f = fonteCanvas(0.85);
+  const raio = f * 0.95;
+  const topo = f * 3;
+
+  // Escala em pixels por metro: fixa pela altura (o pêndulo de 2 m ocupa a tela toda),
+  // e só diminui quando o balanço atual não cabe na largura (pêndulo longo e ângulo grande).
+  const escala = Math.min((h - topo - raio - f) / L_MAXIMO, (w / 2 - raio - f) / (sim.L * Math.sin(sim.theta0)));
+  const px = w / 2;
+  const py = topo;
+  const comp = sim.L * escala;
+  const bx = px + comp * Math.sin(sim.theta);
+  const by = py + comp * Math.cos(sim.theta);
+
+  // Suporte
+  ctx.fillStyle = cor('--text');
+  ctx.fillRect(px - f * 4, py - f * 0.5, f * 8, f * 0.5);
+
+  // Linha vertical de referência e arco da amplitude
+  ctx.strokeStyle = cor('--border');
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + comp + raio * 1.5); ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py, comp, Math.PI / 2 - sim.theta0, Math.PI / 2 + sim.theta0); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Posição de largada (fantasma)
+  ctx.beginPath();
+  ctx.arc(px + comp * Math.sin(sim.theta0), py + comp * Math.cos(sim.theta0), raio, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  // Fio e massa
+  ctx.strokeStyle = cor('--text');
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(bx, by, raio, 0, 2 * Math.PI);
+  ctx.fillStyle = cor('--accent');
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py, f * 0.25, 0, 2 * Math.PI); ctx.fillStyle = cor('--text'); ctx.fill();
+
+  // Textos: tempo, ângulo e oscilações
+  ctx.fillStyle = cor('--text');
+  ctx.font = `700 ${f}px ${FONTE}`;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(`t = ${fmt(sim.t, 1)} s`, f * 0.8, f * 0.6);
+  ctx.fillText(`θ = ${fmt(sim.theta * 180 / Math.PI, 1)}°`, f * 0.8, f * 1.9);
+  ctx.textAlign = 'right';
+  ctx.fillText(`oscilações: ${Math.floor(sim.totalExtremos / 2)}`, w - f * 0.8, f * 0.6);
+
+  // Régua de 50 cm
+  const regua = 0.5 * escala;
+  const ry = h - f * 0.9;
+  ctx.strokeStyle = cor('--text');
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(f * 0.8, ry - f * 0.3); ctx.lineTo(f * 0.8, ry);
+  ctx.lineTo(f * 0.8 + regua, ry); ctx.lineTo(f * 0.8 + regua, ry - f * 0.3);
+  ctx.stroke();
+  ctx.font = `${f * 0.85}px ${FONTE}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('50 cm', f * 0.8 + regua / 2, ry - f * 0.2);
+}
+
+/* ---------- Ligações ---------- */
+
+function desenharTudo() {
+  desenharGrafico();
+  desenharPendulo();
+}
+
+Object.values(controles).forEach(c => c.addEventListener('input', lerControles));
+document.querySelectorAll('[data-g]').forEach(b => b.addEventListener('click', () => {
+  controles.g.value = b.dataset.g;
+  lerControles();
+}));
+document.querySelectorAll('[data-ang]').forEach(b => b.addEventListener('click', () => {
+  controles.ang.value = b.dataset.ang;
+  lerControles();
+}));
+$('#btn-iniciar').addEventListener('click', iniciar);
+$('#btn-pausar').addEventListener('click', pausar);
+$('#btn-reiniciar').addEventListener('click', reiniciar);
+$('#btn-exemplo').addEventListener('click', () => preencherTabela(EXEMPLO));
+$('#btn-limpar').addEventListener('click', () => preencherTabela(EXEMPLO.map(() => ['', ''])));
+
+// Atalhos de teclado (fora dos campos de texto da tabela).
+const naSimulacao = e => !$('#painel-simular').hidden && !e.target.matches('input[type="text"]');
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input[type="text"]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '1') abrirAba('calcular');
+  else if (e.key === '2') abrirAba('simular');
+  else if (!naSimulacao(e)) return;
+  else if (e.key === ' ') {
+    e.preventDefault(); // o espaço não "clica" no último botão usado
+    sim.rodando ? pausar() : iniciar();
+  } else if (e.key === 'r' || e.key === 'R') reiniciar();
+});
+document.addEventListener('keyup', e => {
+  if (e.key === ' ' && naSimulacao(e)) e.preventDefault();
+});
+
+new ResizeObserver(desenharTudo).observe($('#tela-grafico'));
+new ResizeObserver(desenharPendulo).observe($('#tela-simulacao'));
+
+/* ---------- Início ---------- */
+
+let temaSalvo = 'light';
+try { temaSalvo = localStorage.getItem('pendulo-tema') || 'light'; } catch (e) { /* sem armazenamento */ }
+montarTabela();
+preencherTabela(EXEMPLO);
+lerControles();
+aplicarTema(temaSalvo);
+abrirAba(location.hash === '#simular' ? 'simular' : 'calcular');
+</script>
+</body>
+</html>
